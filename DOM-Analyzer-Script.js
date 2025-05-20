@@ -156,6 +156,18 @@
         }
         treeContainer.innerHTML = '';
         treeContainer.appendChild(buildTree(rootNode));
+        // After rendering the tree, re-populate the collapse-depth dropdown
+        const stats = getNodeStats(rootNode);
+        const depthSelect = popup.document.getElementById('collapse-depth');
+        if (depthSelect) {
+            depthSelect.innerHTML = '<option value="0">Collapse to Level...</option>';
+            for (let i = 1; i <= stats.depth; i++) {
+                depthSelect.innerHTML += `<option value="${i}">Level ${i}</option>`;
+            }
+        }
+        updateStats();
+        // After rendering, re-attach event listeners
+        setupEventListeners();
     }
 
     function buildTree(node, depth = 0, path = '0') {
@@ -610,6 +622,8 @@
                 }
                 .tree-container {
                     flex: 1;
+                    height: 100%;
+                    min-height: 0;
                     overflow: auto;
                     padding: 15px;
                 }
@@ -854,6 +868,85 @@
                     100% { color: #f38ba8; text-shadow: 2px 2px 0 #232634, 4px 4px 0 #89b4fa; }
                 }
                 @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+                .chart-faded {
+                    opacity: 0.15 !important;
+                    filter: blur(1px);
+                    pointer-events: none;
+                }
+                .chart-highlight {
+                    opacity: 1 !important;
+                    filter: none;
+                    stroke: #89b4fa !important;
+                    stroke-width: 4 !important;
+                }
+                .chart-highlight text, .chart-faded text {
+                    fill: #cdd6f4 !important;
+                    font-weight: normal !important;
+                    filter: none !important;
+                    opacity: 1 !important;
+                }
+                .main-container.fullscreen-chart .tree-container#tree {
+                    display: none !important;
+                }
+                .main-container.fullscreen-chart .tree-container#chart {
+                    flex: 1 1 100%;
+                    width: 100% !important;
+                    height: 100vh !important;
+                    margin: 0 !important;
+                    max-height: none !important;
+                    display: block !important;
+                }
+                .main-container.fullscreen-structure {
+                    position: fixed !important;
+                    top: 0 !important;
+                    left: 0 !important;
+                    width: 100vw !important;
+                    height: 100vh !important;
+                    min-height: 0 !important;
+                    overflow: hidden !important;
+                }
+                .main-container.fullscreen-structure .tree-container#tree {
+                    flex: 1 1 100%;
+                    width: 100% !important;
+                    height: 100vh !important;
+                    margin: 0 !important;
+                    max-height: 100vh !important;
+                    display: block !important;
+                    overflow: auto !important;
+                    position: relative;
+                    padding: 0 !important;
+                }
+                .fullscreen-back-btn {
+                    position: absolute;
+                    top: 20px;
+                    right: 30px;
+                    z-index: 9999;
+                    background: #89b4fa;
+                    color: #232634;
+                    border: none;
+                    border-radius: 4px;
+                    padding: 8px 18px;
+                    font-size: 15px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    box-shadow: 0 2px 8px #0002;
+                }
+                /* Dynamic inspect highlight styles */
+                .tree-label.inspected-dynamic {
+                    background: rgba(137,180,250,0.18) !important;
+                    color: #f38ba8 !important;
+                    font-weight: bold;
+                }
+                .tree-children.collapsed-dynamic {
+                    display: none !important;
+                }
+                .tree-label.inspected-clicked {
+                    background: rgba(137,180,250,0.25) !important;
+                    outline: 1px dashed #89b4fa;
+                    outline-offset: -2px;
+                    color: #cdd6f4 !important;
+                    font-weight: bold;
+                }
             </style>
         </head>
         <body class="dark-theme">
@@ -869,6 +962,7 @@
                         <label class="toggle-text-nodes"><input type="checkbox" id="toggle-text-nodes" checked> Show Text Nodes</label>
                         <button class="export-btn" id="export-json">Export JSON</button>
                         <button class="export-btn" id="export-html">Export HTML</button>
+                        <button class="export-btn" id="fullscreen-chart">Full Screen Chart</button>
                     </div>
                     <div class="toolbar-group">
                         <button id="inspect-toggle">Inspect Element</button>
@@ -930,17 +1024,17 @@
         renderChart();
     }
 
-    // Breadcrumb
-    const breadcrumb = popup.document.getElementById('breadcrumb');
-    updateBreadcrumb('0');
-
     // Update stats (with null checks)
+    function updateStats() {
+        const stats = getNodeStats(rootNode);
     const elCount = popup.document.getElementById('element-count');
     if (elCount) elCount.textContent = stats.elements;
     const txtCount = popup.document.getElementById('text-count');
     if (txtCount) txtCount.textContent = stats.textNodes;
     const depthLevel = popup.document.getElementById('depth-level');
     if (depthLevel) depthLevel.textContent = stats.depth;
+    }
+    updateStats();
 
     // Set up depth selector
     const depthSelect = popup.document.getElementById('collapse-depth');
@@ -951,6 +1045,12 @@
 
     // Add event listeners
     function setupEventListeners() {
+        const breadcrumb = popup.document.getElementById('breadcrumb');
+        const treeContainer = popup.document.getElementById('tree');
+        if (!treeContainer) {
+            console.warn('Tree container not found in setupEventListeners');
+            return;
+        }
         // Toggle node expansion
         treeContainer.addEventListener('click', function(e) {
             const toggle = e.target.closest('.toggle');
@@ -972,6 +1072,7 @@
         });
 
         // Breadcrumb navigation
+        if (breadcrumb) {
         breadcrumb.addEventListener('click', function(e) {
             const crumb = e.target.closest('.breadcrumb-item');
             if (!crumb) return;
@@ -986,6 +1087,7 @@
                 highlightOriginal(path);
             }
         });
+        }
 
         // Highlight on hover
         treeContainer.addEventListener('mouseover', function(e) {
@@ -1012,7 +1114,9 @@
         });
 
         // Expand/collapse all
-        popup.document.getElementById('expand-all').addEventListener('click', function() {
+        const expandAllBtn = popup.document.getElementById('expand-all');
+        if (expandAllBtn) {
+            expandAllBtn.addEventListener('click', function() {
             treeContainer.querySelectorAll('.tree-children').forEach(el => {
                 el.classList.remove('collapsed');
             });
@@ -1020,7 +1124,10 @@
                 el.textContent = '▾';
             });
         });
-        popup.document.getElementById('collapse-all').addEventListener('click', function() {
+        }
+        const collapseAllBtn = popup.document.getElementById('collapse-all');
+        if (collapseAllBtn) {
+            collapseAllBtn.addEventListener('click', function() {
             treeContainer.querySelectorAll('.tree-children').forEach(el => {
                 el.classList.add('collapsed');
             });
@@ -1028,8 +1135,11 @@
                 el.textContent = '▸';
             });
         });
+        }
         // Collapse to depth
-        popup.document.getElementById('collapse-depth').addEventListener('change', function() {
+        const collapseDepth = popup.document.getElementById('collapse-depth');
+        if (collapseDepth) {
+            collapseDepth.addEventListener('change', function() {
             const depth = parseInt(this.value);
             if (depth === 0) return;
             treeContainer.querySelectorAll('.tree-node').forEach(node => {
@@ -1049,17 +1159,23 @@
                 }
             });
         });
+        }
 
         // Show/hide text nodes
-        popup.document.getElementById('toggle-text-nodes').addEventListener('change', function() {
+        const toggleTextNodes = popup.document.getElementById('toggle-text-nodes');
+        if (toggleTextNodes) {
+            toggleTextNodes.addEventListener('change', function() {
             showTextNodes = this.checked;
             treeContainer.innerHTML = '';
             treeContainer.appendChild(buildTree(rootNode));
             updateBreadcrumb('0');
         });
+        }
 
         // Export JSON
-        popup.document.getElementById('export-json').addEventListener('click', function() {
+        const exportJsonBtn = popup.document.getElementById('export-json');
+        if (exportJsonBtn) {
+            exportJsonBtn.addEventListener('click', function() {
             const json = JSON.stringify(domToJson(rootNode), null, 2);
             const blob = new Blob([json], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -1069,8 +1185,11 @@
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         });
+        }
         // Export HTML
-        popup.document.getElementById('export-html').addEventListener('click', function() {
+        const exportHtmlBtn = popup.document.getElementById('export-html');
+        if (exportHtmlBtn) {
+            exportHtmlBtn.addEventListener('click', function() {
             const html = rootNode.outerHTML;
             const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
@@ -1080,101 +1199,79 @@
             a.click();
             setTimeout(() => URL.revokeObjectURL(url), 1000);
         });
+        }
+
+        // Full Screen Chart
+        const fullscreenChartBtn = popup.document.getElementById('fullscreen-chart');
+        if (fullscreenChartBtn) {
+            fullscreenChartBtn.addEventListener('click', function() {
+                const mainContainer = popup.document.querySelector('.main-container');
+                const treeContainer = popup.document.getElementById('tree');
+                const chartContainer = popup.document.getElementById('chart');
+                let backBtn = popup.document.getElementById('fullscreen-back-btn');
+
+                if (mainContainer.classList.contains('fullscreen-chart')) {
+                    // Exit fullscreen
+                    mainContainer.classList.remove('fullscreen-chart');
+                    fullscreenChartBtn.textContent = 'Full Screen Chart';
+                    if (backBtn) backBtn.remove();
+                } else {
+                    // Enter fullscreen
+                    mainContainer.classList.add('fullscreen-chart');
+                    fullscreenChartBtn.textContent = 'Exit Full Screen';
+                    // Add back button
+                    if (!backBtn) {
+                        backBtn = popup.document.createElement('button');
+                        backBtn.id = 'fullscreen-back-btn';
+                        backBtn.textContent = 'Back';
+                        backBtn.className = 'fullscreen-back-btn';
+                        backBtn.addEventListener('click', function() {
+                            fullscreenChartBtn.click(); // Simulate click on fullscreen button to exit
+                        });
+                        popup.document.body.appendChild(backBtn);
+                    }
+                }
+            });
+        }
 
         // Search functionality
         const searchInput = popup.document.getElementById('search-input');
         const searchResults = popup.document.getElementById('search-results');
-        
+        if (searchInput && searchResults) {
         searchInput.addEventListener('input', function() {
             const term = this.value.toLowerCase();
             searchResults.innerHTML = '';
-            
             if (!term) {
                 treeContainer.querySelectorAll('.search-match').forEach(el => 
                     el.classList.remove('search-match')
                 );
                 return;
             }
-            
             const matches = [];
             treeContainer.querySelectorAll('.tree-label').forEach(label => {
                 const text = label.textContent.toLowerCase();
                 label.classList.remove('search-match');
-                
                 if (text.includes(term)) {
                     label.classList.add('search-match');
                     matches.push(label);
                 }
             });
-            
             if (matches.length > 0) {
                 const resultText = popup.document.createElement('div');
                 resultText.textContent = `Found ${matches.length} match${matches.length > 1 ? 'es' : ''}`;
                 resultText.className = 'search-summary';
                 searchResults.appendChild(resultText);
-                
                 const firstMatch = matches[0];
                 firstMatch.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         });
+        }
         
         // Inspect element functionality
+        let overlay = null;
         let isInspecting = false;
-        let overlay = null;
-        const toggleButton = popup.document.getElementById('inspect-toggle');
-        
-        toggleButton.addEventListener('click', function() {
-            isInspecting = !isInspecting;
-            
-            if (isInspecting) {
-                this.textContent = 'Cancel Inspect';
-                this.classList.add('active');
-                setupInspectMode();
-            } else {
-                this.textContent = 'Inspect Element';
-                this.classList.remove('active');
-                removeInspectMode();
-            }
-        });
-        
-        // Theme toggle
-        const themeToggle = popup.document.getElementById('theme-toggle');
-        themeToggle.addEventListener('click', function() {
-            const body = popup.document.body;
-            if (body.classList.contains('dark-theme')) {
-                body.classList.remove('dark-theme');
-                body.classList.add('light-theme');
-                this.textContent = '🌙';
-            } else {
-                body.classList.remove('light-theme');
-                body.classList.add('dark-theme');
-                this.textContent = '☀️';
-            }
-        });
-
-        // Custom filtering
-        function updateFilter() {
-            filterCriteria.tag = popup.document.getElementById('filter-tag').value.trim();
-            filterCriteria.id = popup.document.getElementById('filter-id').value.trim();
-            filterCriteria.class = popup.document.getElementById('filter-class').value.trim();
-            filterCriteria.attr = popup.document.getElementById('filter-attr').value.trim();
-            treeContainer.innerHTML = '';
-            treeContainer.appendChild(buildTree(rootNode));
-            updateBreadcrumb('0');
-        }
-        ['filter-tag','filter-id','filter-class','filter-attr'].forEach(id => {
-            popup.document.getElementById(id).addEventListener('input', updateFilter);
-        });
-        popup.document.getElementById('filter-clear').addEventListener('click', function() {
-            ['filter-tag','filter-id','filter-class','filter-attr'].forEach(id => popup.document.getElementById(id).value = '');
-            updateFilter();
-        });
-    }
-    
-    function setupInspectMode() {
-        let overlay = null;
-        
-        function createOverlay(position) {
+        // Handler functions (defined inside to access overlay, isInspecting)
+        const createOverlay = (position) => {
             const overlay = document.createElement('div');
             overlay.style.cssText = `
                 position: fixed;
@@ -1188,112 +1285,206 @@
                 height: ${position.height}px;
                 transition: all 0.2s ease;
             `;
+            document.body.appendChild(overlay);
             return overlay;
+        };
+        const removeOverlay = () => {
+            if (overlay) {
+                document.body.removeChild(overlay);
+                overlay = null;
         }
-        
-        function calculateNodePosition(node) {
+        };
+        const calculateNodePosition = (node) => {
             if (node.nodeType !== 1) return null;
             const rect = node.getBoundingClientRect();
             if (!rect.width && !rect.height) return null;
-            
             return {
                 top: Math.round(rect.top),
                 left: Math.round(rect.left),
                 width: Math.round(rect.width),
                 height: Math.round(rect.height)
             };
-        }
-        
-        function findNodePath(element) {
+        };
+        const findNodePath = (element) => {
             let path = [];
             let current = element;
-            
             while (current && current !== document.documentElement) {
                 const parent = current.parentNode;
                 if (!parent) break;
-                
+                // Use Array.from for direct children to find index safely
                 const index = Array.from(parent.children).indexOf(current);
+                if (index === -1) { // Handle cases where element is not a direct child (e.g., SVG inner elements)
+                     // Fallback: find among all childNodes, less robust but might work for some structures
+                     const allChildren = Array.from(parent.childNodes);
+                     let tempIndex = -1;
+                     for(let i=0; i < allChildren.length; i++) {
+                         if (allChildren[i] === current) { tempIndex = i; break; }
+                     }
+                     index = tempIndex;
+                     if (index === -1) break; // Cannot find element among parent's children
+                }
                 path.unshift(index);
                 current = parent;
             }
-            
+            // If path is empty, it means current is document.documentElement (or disconnected node)
+            if (path.length === 0 && element === document.documentElement) return '0';
+            if (path.length === 0) return null; // Node not found in tree structure
             return '0-' + path.join('-');
-        }
-        
-        function handleMouseOver(e) {
-            if (overlay) {
-                document.body.removeChild(overlay);
-                overlay = null;
+        };
+        // Dynamic highlight: only show the hovered node and its ancestors/descendants
+        const highlightNodeInTreeDynamic = (path) => {
+            if (!isInspecting) return; // Ensure inspect mode is active
+            const treeContainer = popup.document.getElementById('tree');
+            if (!treeContainer) return;
+            // Remove all previous highlights/collapses
+            treeContainer.querySelectorAll('.tree-label, .tree-children').forEach(el => {
+                el.classList.remove('inspected-dynamic', 'collapsed-dynamic', 'inspected-clicked'); // Also remove click highlight
+            });
+            // Find the node label
+            const nodeLabel = treeContainer.querySelector(`[data-path="${path}"] > .tree-label`);
+            if (!nodeLabel) return;
+            // Highlight the node and its ancestors
+            let parent = nodeLabel.parentNode;
+            while (parent && parent !== treeContainer) {
+                const label = Array.from(parent.children).find(child => child.classList && child.classList.contains('tree-label'));
+                if (label) label.classList.add('inspected-dynamic');
+                parent = parent.parentNode.closest('.tree-node');
             }
-            
-            const position = calculateNodePosition(e.target);
-            if (position) {
-                overlay = createOverlay(position);
-                document.body.appendChild(overlay);
+            nodeLabel.classList.add('inspected-dynamic');
+            // Expand ancestors, collapse all other tree-children
+            treeContainer.querySelectorAll('.tree-children').forEach(children => {
+                children.classList.add('collapsed-dynamic');
+            });
+            // Uncollapse the path to the node
+            let current = nodeLabel.parentNode;
+            while (current && current !== treeContainer) {
+                const children = Array.from(current.children).find(child => child.classList && child.classList.contains('tree-children'));
+                if (children) children.classList.remove('collapsed-dynamic');
+                current = current.parentNode.closest('.tree-node');
             }
-        }
-        
-        function handleClick(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            
+            // Uncollapse descendants
+            function uncollapseDescendants(node) {
+                const children = Array.from(node.children).find(child => child.classList && child.classList.contains('tree-children'));
+                if (children) {
+                    children.classList.remove('collapsed-dynamic');
+                    Array.from(children.children).forEach(childNode => {
+                        if (childNode.classList && childNode.classList.contains('tree-node')) {
+                            uncollapseDescendants(childNode);
+                        }
+                    });
+                }
+            }
+            uncollapseDescendants(nodeLabel.parentNode);
+            // Scroll to the node
+            nodeLabel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+        // Restore full tree view
+        const restoreTreeDynamic = () => {
+            const treeContainer = popup.document.getElementById('tree');
+            if (!treeContainer) return;
+            treeContainer.querySelectorAll('.tree-label, .tree-children').forEach(el => {
+                el.classList.remove('inspected-dynamic', 'collapsed-dynamic', 'inspected-clicked'); // Remove all inspect highlights
+            });
+            // Ensure all nodes are expanded (remove manual collapse class too)
+             treeContainer.querySelectorAll('.tree-children').forEach(el => {
+                el.classList.remove('collapsed'); // Remove manual collapse class
+                el.classList.remove('collapsed-dynamic');
+             });
+             treeContainer.querySelectorAll('.has-children .toggle').forEach(el => {
+                el.textContent = '▾'; // Update toggle icon
+             });
+        };
+        // Handle mouseover on elements in the main page
+        const handleMouseOver = (e) => {
+            if (!isInspecting) return; // Ensure inspect mode is active
+            // removeOverlay(); // Remove previous overlay
+            // const position = calculateNodePosition(e.target);
+            // if (position) {
+            //     createOverlay(position); // Create new overlay
+            // }
+            // Live highlight in structure window
             const path = findNodePath(e.target);
             if (path) {
-                highlightNodeInTree(path);
-                
+                highlightNodeInTreeDynamic(path);
+            } else {
+                 // If element is not found in tree (e.g., script tags, comments), restore full tree
+                 restoreTreeDynamic();
+            }
+        };
+        // Handle mouseout on elements in the main page
+        const handleMouseOut = (e) => {
+            if (!isInspecting) return; // Ensure inspect mode is active
+            // removeOverlay(); // Keep overlay until click for better usability
+             // Optionally, remove highlight in tree if mouse leaves the element quickly without hover effect kicking in fully
+             // This might be too flickery, so keeping it off for now.
+        };
+        // Handle click on element in the main page while inspect mode is active
+        const handleClick = (e) => {
+            if (!isInspecting) return; // Ensure inspect mode is active
+            e.preventDefault(); // Prevent default link/button behavior
+            e.stopPropagation(); // Stop event from propagating
+            const path = findNodePath(e.target);
+            if (path) {
+                // Turn off inspect mode UI
+                isInspecting = false; // Manually set state
                 document.removeEventListener('mouseover', handleMouseOver, true);
                 document.removeEventListener('mouseout', handleMouseOut, true);
-                document.removeEventListener('click', handleClick, true);
-                
-                if (overlay) {
-                    document.body.removeChild(overlay);
-                    overlay = null;
-                }
-                
-                popup.document.getElementById('inspect-toggle').textContent = 'Inspect Element';
-                popup.document.getElementById('inspect-toggle').classList.remove('active');
+                document.removeEventListener('click', handleClick, true); // Remove self
+                removeOverlay(); // Remove the highlight overlay
+                const inspectToggleBtn = popup.document.getElementById('inspect-toggle');
+                 if(inspectToggleBtn) { inspectToggleBtn.classList.remove('active'); inspectToggleBtn.textContent = 'Inspect Element';}
+                // Focus on the clicked node in the tree (static highlight)
+                focusOnNodeInTree(path);
+            } else {
+                 // If clicked element not found in tree, just turn off inspect mode
+                 const inspectToggleBtn = popup.document.getElementById('inspect-toggle');
+                 if(inspectToggleBtn) { inspectToggleBtn.click(); } // Simulate button click to turn off
             }
-        }
-        
-        function handleMouseOut(e) {
-            if (overlay) {
-                document.body.removeChild(overlay);
-                overlay = null;
-            }
-        }
-        
-        function highlightNodeInTree(path) {
-            const nodeSelector = `[data-path="${path}"] > .tree-label`;
-            const nodeLabel = treeContainer.querySelector(nodeSelector);
-            
-            if (nodeLabel) {
-                // Expand parents if needed
-                let parent = nodeLabel.parentNode;
-                while (parent && parent !== treeContainer) {
-                    const children = parent.querySelector('.tree-children');
-                    const toggle = parent.querySelector('.toggle');
-                    
-                    if (children && children.classList.contains('collapsed')) {
-                        children.classList.remove('collapsed');
-                        if (toggle) toggle.textContent = '▾';
-                    }
-                    
-                    parent = parent.parentNode.closest('.tree-node');
-                }
-                
-                // Highlight and scroll
-                nodeLabel.classList.add('inspected');
-                setTimeout(() => {
-                    nodeLabel.classList.remove('inspected');
-                }, 2000);
-                
+        };
+        // Focus on a specific node (used after click)
+        const focusOnNodeInTree = (path) => {
+            const treeContainer = popup.document.getElementById('tree');
+            if (!treeContainer) return;
+            // Ensure tree is fully expanded and clean of dynamic highlights
+            restoreTreeDynamic(); // Removes collapsed-dynamic and inspected-dynamic, also removes manual collapses
+            // Find the node label
+            const nodeLabel = treeContainer.querySelector(`[data-path="${path}"] > .tree-label`);
+            if (!nodeLabel) return;
+            // Add a persistent highlight class
+            nodeLabel.classList.add('inspected-clicked');
+            // Scroll to the node
                 nodeLabel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }
-        
+        };
+        // --- INSPECT TOGGLE BUTTON LOGIC ---
+        const inspectToggle = popup.document.getElementById('inspect-toggle');
+        if (inspectToggle) {
+            inspectToggle.addEventListener('click', function() {
+                if (this.classList.contains('active')) {
+                    // Turning OFF inspect mode
+                    isInspecting = false; // Explicitly set state
+                    this.classList.remove('active');
+                    this.textContent = 'Inspect Element';
+                    document.removeEventListener('mouseover', handleMouseOver, true);
+                    document.removeEventListener('mouseout', handleMouseOut, true);
+                    document.removeEventListener('click', handleClick, true);
+                    removeOverlay(); // Ensure overlay is removed
+                    restoreTreeDynamic(); // Restore the full tree view
+                } else {
+                    // Turning ON inspect mode
+                    isInspecting = true; // Explicitly set state
+                    this.classList.add('active');
+                    this.textContent = 'Cancel Inspect';
+                    // Remove any previous click highlight when starting inspect mode
+                    const treeContainer = popup.document.getElementById('tree');
+                    if (treeContainer) {
+                        treeContainer.querySelectorAll('.inspected-clicked').forEach(el => el.classList.remove('inspected-clicked'));
+                    }
         document.addEventListener('mouseover', handleMouseOver, true);
         document.addEventListener('mouseout', handleMouseOut, true);
         document.addEventListener('click', handleClick, true);
+                }
+            });
+        }
     }
     
     function removeInspectMode() {
@@ -1313,7 +1504,7 @@
     function domToChartData(node) {
         if (node.nodeType === 1) {
             return {
-                name: node.tagName.toLowerCase() + (node.id ? `#${node.id}` : '') + (node.className ? '.' + node.className.split(' ').join('.') : ''),
+                name: node.tagName.toLowerCase() + (node.id ? `#${node.id}` : '') + (typeof node.className === 'string' && node.className ? '.' + node.className.split(' ').join('.') : ''),
                 children: Array.from(node.childNodes).map(domToChartData).filter(Boolean)
             };
         } else if (node.nodeType === 3 && node.textContent.trim()) {
@@ -1363,10 +1554,16 @@
             .append('svg')
             .attr('width', '100%')
             .attr('height', height)
-            .attr('viewBox', `0 0 ${width} ${height}`)
-            .call(d3ref.zoom().on('zoom', function (event) {
+            .attr('viewBox', `0 0 ${width} ${height}`);
+
+        // Center group
+        const g = svg.append('g').attr('transform', `translate(${nodeWidth / 2},${height / 2})`);
+
+        // Apply zoom to the group
+        svg.call(d3ref.zoom().on('zoom', function (event) {
                 g.attr('transform', event.transform);
             }));
+
         // Background grid
         svg.append('g')
             .selectAll('line.grid-x')
@@ -1386,16 +1583,14 @@
             .attr('x1', 0).attr('x2', width)
             .attr('stroke', '#313244')
             .attr('stroke-width', 0.5);
-        // Center group
-        const g = svg.append('g').attr('transform', `translate(${width/10},${height/10})`);
         // Links
-        g.selectAll('.link')
+        const link = g.selectAll('.link')
             .data(root.links())
             .enter()
             .append('path')
             .attr('class', 'link')
             .attr('fill', 'none')
-            .attr('stroke', '#585b70')
+            .attr('stroke', '#89b4fa')
             .attr('stroke-width', 2)
             .attr('d', d3ref.linkHorizontal()
                 .x(d => d.y)
@@ -1407,7 +1602,7 @@
             .append('g')
             .attr('class', 'node')
             .attr('transform', d => `translate(${d.y},${d.x})`);
-        node.append('circle')
+        const nodeCircle = node.append('circle')
             .attr('r', 16)
             .attr('fill', '#89b4fa')
             .attr('stroke', '#232634')
@@ -1453,6 +1648,32 @@
             });
         // Tooltips
         node.append('title').text(d => d.data.name);
+
+        // --- HIGHLIGHT ON HOVER: ancestors/descendants only ---
+        node.on('mouseover', function(event, d) {
+            // Collect all ancestors and descendants
+            const highlightSet = new Set();
+            let current = d;
+            while (current) {
+                highlightSet.add(current);
+                current = current.parent;
+            }
+            function collectDescendants(node) {
+                highlightSet.add(node);
+                if (node.children) node.children.forEach(collectDescendants);
+            }
+            collectDescendants(d);
+            // Highlight nodes (only circles)
+            nodeCircle.classed('chart-highlight', n => highlightSet.has(n))
+                .classed('chart-faded', n => !highlightSet.has(n));
+            // Highlight links
+            link.classed('chart-highlight', l => highlightSet.has(l.source) && highlightSet.has(l.target))
+                .classed('chart-faded', l => !(highlightSet.has(l.source) && highlightSet.has(l.target)));
+        });
+        node.on('mouseout', function() {
+            nodeCircle.classed('chart-highlight', false).classed('chart-faded', false);
+            link.classed('chart-highlight', false).classed('chart-faded', false);
+        });
     }
 
     function startVisualizer() {
