@@ -270,52 +270,6 @@
                 <option value="copy-xpath">Copy XPath</option>
                 <option value="edit">Edit</option>
             `;
-            dropdown.addEventListener('change', function(e) {
-                if (this.value === 'copy-selector') {
-                    const selectorStr = node.tagName.toLowerCase() + (id || '') + classList;
-                    try {
-                        popup.focus && popup.focus();
-                        navigator.clipboard.writeText(selectorStr).catch(() => {}); // suppress NotAllowedError
-                        this.options[0].textContent = 'Copied!';
-                        setTimeout(() => { this.options[0].textContent = '⋮'; }, 1200);
-                    } catch (err) {
-                        // Fallback for clipboard
-                        try {
-                            const temp = popup.document.createElement('textarea');
-                            temp.value = selectorStr;
-                            popup.document.body.appendChild(temp);
-                            temp.select();
-                            popup.document.execCommand('copy');
-                            popup.document.body.removeChild(temp);
-                        } catch {}
-                        this.options[0].textContent = 'Copied!';
-                        setTimeout(() => { this.options[0].textContent = '⋮'; }, 1200);
-                    }
-                } else if (this.value === 'copy-xpath') {
-                    const xpath = getXPath(node);
-                    try {
-                        popup.focus && popup.focus();
-                        navigator.clipboard.writeText(xpath).catch(() => {}); // suppress NotAllowedError
-                        this.options[0].textContent = 'Copied!';
-                        setTimeout(() => { this.options[0].textContent = '⋮'; }, 1200);
-                    } catch (err) {
-                        // Fallback for clipboard
-                        try {
-                            const temp = popup.document.createElement('textarea');
-                            temp.value = xpath;
-                            popup.document.body.appendChild(temp);
-                            temp.select();
-                            popup.document.execCommand('copy');
-                            popup.document.body.removeChild(temp);
-                        } catch {}
-                        this.options[0].textContent = 'Copied!';
-                        setTimeout(() => { this.options[0].textContent = '⋮'; }, 1200);
-                    }
-                } else if (this.value === 'edit') {
-                    makeEditable(label, node);
-                }
-                this.value = '';
-            });
             label.appendChild(dropdown);
 
             // If element has a single text child, render as editable .text span
@@ -467,6 +421,29 @@
         alert('Popup blocked. Please allow popups to use the DOM Tree Visualizer.');
         return;
     }
+
+    // Add a message listener to the main window to handle copy requests from the popup
+    window.addEventListener('message', function(event) {
+        // Check if the message is from the expected origin and has the correct format
+        console.log('Main window received message:', event.data);
+        if (event.source === popup && event.data && event.data.command === 'copyToClipboard') {
+            console.log('Main window received copy request:', event.data.text);
+            try {
+                navigator.clipboard.writeText(event.data.text).then(function() {
+                    console.log('Copy successful!');
+                    // Optionally send a success message back to the popup
+                    // popup.postMessage({ command: 'copyStatus', success: true }, '*');
+                }).catch(function(err) {
+                    console.error('Failed to copy:', err);
+                    // Optionally send an error message back to the popup
+                    // popup.postMessage({ command: 'copyStatus', success: false, error: err.message }, '*');
+                });
+            } catch (err) {
+                 console.error('Clipboard API not available or permission denied:', err);
+                 // Fallback or inform user
+            }
+        }
+    });
 
     // Write popup content
     popup.document.write(`
@@ -1018,10 +995,12 @@
         popup.document.addEventListener('DOMContentLoaded', () => {
             renderTree();
             renderChart();
+            setupCopyListeners(popup, popup.d3 || d3); // Pass popup and d3 ref
         });
     } else {
         renderTree();
         renderChart();
+        setupCopyListeners(popup, popup.d3 || d3); // Pass popup and d3 ref
     }
 
     // Update stats (with null checks)
@@ -1056,7 +1035,7 @@
             const toggle = e.target.closest('.toggle');
             if (!toggle) return;
             const label = toggle.closest('.tree-label');
-            if (!label || !label.classList.contains('has-children')) return;
+            if (!label || !label.classList.contains('has-children')) return;;
             const node = label.parentNode;
             const children = node.querySelector('.tree-children');
             if (children) {
@@ -1082,7 +1061,7 @@
             if (nodeLabel) {
                 nodeLabel.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 nodeLabel.classList.add('inspected');
-                setTimeout(() => nodeLabel.classList.remove('inspected'), 1200);
+                setTimeout(() => nodeLabel.classList.remove('inspected'), 1200);;
                 updateBreadcrumb(path);
                 highlightOriginal(path);
             }
@@ -1183,7 +1162,7 @@
             a.href = url;
             a.download = 'dom-tree.json';
             a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);;
         });
         }
         // Export HTML
@@ -1197,7 +1176,7 @@
             a.href = url;
             a.download = 'dom-tree.html';
             a.click();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);;
         });
         }
 
@@ -1228,7 +1207,7 @@
                         backBtn.addEventListener('click', function() {
                             fullscreenChartBtn.click(); // Simulate click on fullscreen button to exit
                         });
-                        popup.document.body.appendChild(backBtn);
+                        popup.document.body.appendChild(backBtn);;
                     }
                 }
             });
@@ -1258,7 +1237,7 @@
             });
             if (matches.length > 0) {
                 const resultText = popup.document.createElement('div');
-                resultText.textContent = `Found ${matches.length} match${matches.length > 1 ? 'es' : ''}`;
+                resultText.textContent = `Found ${matches.length} match${matches.length > 1 ? 'es' : ''}`;;
                 resultText.className = 'search-summary';
                 searchResults.appendChild(resultText);
                 const firstMatch = matches[0];
@@ -1283,7 +1262,7 @@
                 left: ${position.left}px;
                 width: ${position.width}px;
                 height: ${position.height}px;
-                transition: all 0.2s ease;
+                transition: all 0.2s ease;;
             `;
             document.body.appendChild(overlay);
             return overlay;
@@ -1324,10 +1303,10 @@
                      if (index === -1) break; // Cannot find element among parent's children
                 }
                 path.unshift(index);
-                current = parent;
+                current = parent;;
             }
             // If path is empty, it means current is document.documentElement (or disconnected node)
-            if (path.length === 0 && element === document.documentElement) return '0';
+            if (path.length === 0 && element === document.documentElement) return '0';;
             if (path.length === 0) return null; // Node not found in tree structure
             return '0-' + path.join('-');
         };
@@ -1335,19 +1314,19 @@
         const highlightNodeInTreeDynamic = (path) => {
             if (!isInspecting) return; // Ensure inspect mode is active
             const treeContainer = popup.document.getElementById('tree');
-            if (!treeContainer) return;
+            if (!treeContainer) return;;
             // Remove all previous highlights/collapses
             treeContainer.querySelectorAll('.tree-label, .tree-children').forEach(el => {
                 el.classList.remove('inspected-dynamic', 'collapsed-dynamic', 'inspected-clicked'); // Also remove click highlight
             });
             // Find the node label
             const nodeLabel = treeContainer.querySelector(`[data-path="${path}"] > .tree-label`);
-            if (!nodeLabel) return;
+            if (!nodeLabel) return;;
             // Highlight the node and its ancestors
             let parent = nodeLabel.parentNode;
             while (parent && parent !== treeContainer) {
                 const label = Array.from(parent.children).find(child => child.classList && child.classList.contains('tree-label'));
-                if (label) label.classList.add('inspected-dynamic');
+                if (label) label.classList.add('inspected-dynamic');;
                 parent = parent.parentNode.closest('.tree-node');
             }
             nodeLabel.classList.add('inspected-dynamic');
@@ -1359,7 +1338,7 @@
             let current = nodeLabel.parentNode;
             while (current && current !== treeContainer) {
                 const children = Array.from(current.children).find(child => child.classList && child.classList.contains('tree-children'));
-                if (children) children.classList.remove('collapsed-dynamic');
+                if (children) children.classList.remove('collapsed-dynamic');;
                 current = current.parentNode.closest('.tree-node');
             }
             // Uncollapse descendants
@@ -1369,7 +1348,7 @@
                     children.classList.remove('collapsed-dynamic');
                     Array.from(children.children).forEach(childNode => {
                         if (childNode.classList && childNode.classList.contains('tree-node')) {
-                            uncollapseDescendants(childNode);
+                            uncollapseDescendants(childNode);;
                         }
                     });
                 }
@@ -1381,7 +1360,7 @@
         // Restore full tree view
         const restoreTreeDynamic = () => {
             const treeContainer = popup.document.getElementById('tree');
-            if (!treeContainer) return;
+            if (!treeContainer) return;;
             treeContainer.querySelectorAll('.tree-label, .tree-children').forEach(el => {
                 el.classList.remove('inspected-dynamic', 'collapsed-dynamic', 'inspected-clicked'); // Remove all inspect highlights
             });
@@ -1432,7 +1411,7 @@
                 document.removeEventListener('click', handleClick, true); // Remove self
                 removeOverlay(); // Remove the highlight overlay
                 const inspectToggleBtn = popup.document.getElementById('inspect-toggle');
-                 if(inspectToggleBtn) { inspectToggleBtn.classList.remove('active'); inspectToggleBtn.textContent = 'Inspect Element';}
+                 if(inspectToggleBtn) { inspectToggleBtn.classList.remove('active'); inspectToggleBtn.textContent = 'Inspect Element';;}
                 // Focus on the clicked node in the tree (static highlight)
                 focusOnNodeInTree(path);
             } else {
@@ -1444,12 +1423,12 @@
         // Focus on a specific node (used after click)
         const focusOnNodeInTree = (path) => {
             const treeContainer = popup.document.getElementById('tree');
-            if (!treeContainer) return;
+            if (!treeContainer) return;;
             // Ensure tree is fully expanded and clean of dynamic highlights
             restoreTreeDynamic(); // Removes collapsed-dynamic and inspected-dynamic, also removes manual collapses
             // Find the node label
             const nodeLabel = treeContainer.querySelector(`[data-path="${path}"] > .tree-label`);
-            if (!nodeLabel) return;
+            if (!nodeLabel) return;;
             // Add a persistent highlight class
             nodeLabel.classList.add('inspected-clicked');
             // Scroll to the node
@@ -1485,8 +1464,109 @@
                 }
             });
         }
+    } // End of setupEventListeners function
+
+    // New function to setup copy listeners from the main window context
+    function setupCopyListeners(popupWindow, d3Library) {
+        // Tree View Dropdown Copy Listeners
+        popupWindow.document.addEventListener('change', function(e) {
+            const dropdown = e.target.closest('.node-actions');
+            if (!dropdown) return;
+            const selectedValue = dropdown.value;
+            const label = dropdown.closest('.tree-label');
+            const node = label.parentNode;
+            let textToCopy = '';
+
+            if (selectedValue === 'copy-selector') {
+                const id = node.id ? `#${node.id}` : '';
+                const classList = Array.from(node.classList).map(c => `.${c}`).join('');
+                textToCopy = '\'' + node.tagName.toLowerCase() + (id || '') + classList + '\'';
+            } else if (selectedValue === 'copy-xpath') {
+                textToCopy = getXPath(node);
+            }
+
+            if (textToCopy) {
+                 // Use execCommand for better cross-window compatibility and focus handling
+                 const tempInput = document.createElement('textarea');
+                 tempInput.value = textToCopy;
+                 document.body.appendChild(tempInput);
+                 tempInput.select();
+                 let success = false;
+                 try {
+                     success = document.execCommand('copy');
+                     console.log('Copy successful (execCommand):', textToCopy);
+                     // Provide feedback in the popup UI
+                     dropdown.options[0].textContent = 'Copied!';
+                     setTimeout(() => { dropdown.options[0].textContent = '⋮'; }, 1200);
+                 } catch (err) {
+                      console.error('Failed to copy (execCommand):', err);
+                     dropdown.options[0].textContent = 'Copy Error!';
+                     setTimeout(() => { dropdown.options[0].textContent = '⋮'; }, 1200);
+                 } finally {
+                     document.body.removeChild(tempInput);
+                 }
+            }
+            dropdown.value = ''; // Reset dropdown
+        });
+
+        // Chart Node Click Copy Listener
+        // This needs to be attached after the chart is rendered
+        // We can add a mutation observer or ensure this runs after renderChart completes
+        // For now, let's add it after a timeout, which is less ideal but works for testing
+        setTimeout(() => {
+            const chartSvg = popupWindow.document.querySelector('#chart svg');
+            if (chartSvg) {
+                 chartSvg.addEventListener('click', function(e) {
+                     const nodeElement = e.target.closest('.node');
+                     if (!nodeElement) return;
+
+                     // Find the corresponding data for the clicked chart node
+                     // This requires traversing up the DOM from the clicked element to find the data bound by D3
+                     let d3Data = null;
+                     let currentElement = nodeElement;
+                     while(currentElement && currentElement !== chartSvg) {
+                          if (currentElement.__data__) {
+                              d3Data = currentElement.__data__;
+                              break;
+                          }
+                          currentElement = currentElement.parentElement;
+                     }
+
+                     if (d3Data && d3Data.data && d3Data.data.name) {
+                        // The name in chart data for elements is already the selector (tag#id.class)
+                        // Wrap it in single quotes for pasting into JS
+                        const selector = '\'' + d3Data.data.name + '\'';
+                        if (selector) {
+                             // Use execCommand for better cross-window compatibility and focus handling
+                             const tempInput = document.createElement('textarea');
+                             tempInput.value = selector;
+                             document.body.appendChild(tempInput);
+                             tempInput.select();
+                             let success = false;
+                             try {
+                                 success = document.execCommand('copy');
+                                 console.log('Chart node copy successful (execCommand):', selector);
+                                 // Optional visual feedback on the chart node itself
+                                 if (d3Library) {
+                                     d3Library.select(nodeElement).select('circle').attr('fill', '#a6e3a1').transition().duration(500).attr('fill', '#89b4fa');
+                                 }
+                            } catch (err) {
+                                console.error('Chart node copy failed (execCommand):', err);
+                                 // Optional error feedback
+                                  if (d3Library) {
+                                      d3Library.select(nodeElement).select('circle').attr('fill', '#f38ba8').transition().duration(500).attr('fill', '#89b4fa');
+                                  }
+                            } finally {
+                                 document.body.removeChild(tempInput);
+                            }
+                        }
+                     }
+                 });
+            }
+        }, 2000); // Adjust timeout if necessary based on chart rendering time
+
     }
-    
+
     function removeInspectMode() {
         // Remove any overlay and event listeners
         const overlays = document.querySelectorAll('div[style*="border: 2px solid #ff5722"]');
@@ -1495,9 +1575,13 @@
     
     // Set up event listeners once the DOM is ready
     if (popup.document.readyState === 'loading') {
-        popup.document.addEventListener('DOMContentLoaded', setupEventListeners);
+        popup.document.addEventListener('DOMContentLoaded', () => {
+            setupEventListeners();
+            setupCopyListeners(popup, popup.d3 || d3); // Pass popup and d3 ref
+        });
     } else {
         setupEventListeners();
+        setupCopyListeners(popup, popup.d3 || d3); // Pass popup and d3 ref
     }
 
     // Chart View rendering
@@ -1649,6 +1733,29 @@
         // Tooltips
         node.append('title').text(d => d.data.name);
 
+        // Add click listener to chart nodes to copy selector
+        node.on('click', function(event, d) {
+            if (d.data && d.data.name) {
+                const selector = d.data.name;
+                if (selector && window.opener) {
+                     window.opener.postMessage({ command: 'copyToClipboard', text: selector }, '*');
+                     // Optionally provide visual feedback in the chart
+                     d3ref.select(this).select('circle').attr('fill', '#a6e3a1').transition().duration(500).attr('fill', '#89b4fa');
+                }
+            }
+        });
+
+        // Add visual feedback to tree view dropdown after sending message
+        const dropdown = this;
+        setTimeout(() => {
+             // This assumes the dropdown is the 'this' context, might need adjustment
+             // A more robust way would be to pass an identifier and target a specific element
+            if (dropdown && dropdown.options && dropdown.options[0]) {
+                dropdown.options[0].textContent = 'Copied!';
+                 setTimeout(() => { dropdown.options[0].textContent = '⋮'; }, 1200);
+            }
+        }, 100); // Give a small delay for the message to potentially be processed
+
         // --- HIGHLIGHT ON HOVER: ancestors/descendants only ---
         node.on('mouseover', function(event, d) {
             // Collect all ancestors and descendants
@@ -1678,7 +1785,7 @@
 
     function startVisualizer() {
         renderTree();
-        loadD3(renderChart);
+        loadD3(renderChart); // renderChart calls setupCopyListeners after timeout
     }
 
     if (popup.document.readyState === 'loading') {
